@@ -11,6 +11,7 @@ y = tf.constant([[0.0],
                  [0],
                  [1]])
 
+
 # Khởi tạo ngẫu nhiên các trọng số W và b thay vì gán sẵn
 W = tf.Variable(tf.random.normal([2, 1]))
 b = tf.Variable(tf.random.normal([1]))
