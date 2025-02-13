@@ -6,17 +6,25 @@ from sklearn.preprocessing import StandardScaler
 # Load dữ liệu iris từ UCI
 iris = fetch_ucirepo(id=53)
 
-# Giữ lại 100 dòng đầu tiên
-Data = iris.data.original.head(100)
+Data = iris.data.original
 
-# Biến đổi nhãn Iris-setosa -> 0, Iris-versicolor -> 1
-Data = Data.replace(['Iris-setosa', 'Iris-versicolor'], [0, 1])
+# Biến đổi nhãn Iris-setosa -> 0, Iris-versicolor -> 1, Iris-virginica -> 2
+Data = Data.replace(
+    ['Iris-setosa', 'Iris-versicolor', 'Iris-virginica'], [0, 1, 2])
 
 # Xáo trộn dữ liệu và chia thành 2 tập train và test
 Data = Data.sample(frac=1).reset_index(drop=True)
 
 X = Data.iloc[:, :-1].values
-y = Data.iloc[:, -1].values.reshape(-1, 1)
+y = Data.iloc[:, -1].values
+
+# One hot encoding y, vơi 3 nhãn: 0, 1, 2
+y = tf.one_hot(y, depth=3).numpy()
+
+# print("\nDữ liệu X: \n", X[:5])
+# print("type x: ", type(X))
+print("\nNhãn y: \n", Data.iloc[:, -1].values[:5])
+print("\nNhãn y one hot: \n", y[:5])
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42)
@@ -34,35 +42,31 @@ y_train = tf.convert_to_tensor(y_train, dtype=tf.float32)
 y_test = tf.convert_to_tensor(y_test, dtype=tf.float32)
 
 # Khởi tạo ngẫu nhiên các trọng số W và b thay vì gán sẵn
-W = tf.Variable(tf.random.normal([4, 1]))
-b = tf.Variable(tf.random.normal([1]))
+W = tf.Variable(tf.random.normal([4, 3]))
+b = tf.Variable(tf.random.normal([3]))
 
 print("\nW khởi tạo ngẫu nhiên ban đầu: \n", W.numpy())
 print("\nb khởi tạo ngẫu nhiên ban đầu: \n", b.numpy())
 
 # Hàm dự đoán
-
-
 @tf.function
 def predict(X, W, b):
-    return tf.nn.sigmoid(tf.matmul(X, W) + b)
+    return tf.nn.softmax(tf.matmul(X, W) + b)
 
-# Hàm mất mát binary crossentropy
-
-
+# Hàm mất mát Categorial crossentropy
 @tf.function
-def binary_crossentropy_loss(y, y_hat):
+def categorial_crossentropy_loss(y, y_hat):
     epsilon = 1e-7
     y_hat = tf.clip_by_value(y_hat, epsilon, 1. - epsilon)
-    return -tf.reduce_mean(y * tf.math.log(y_hat) + (1 - y) * tf.math.log(1 - y_hat))
+    return -tf.reduce_mean(tf.reduce_sum(y*tf.math.log(y_hat), axis = 1))
 
 
 print("\nCập nhật trọng số W và b:\n")
-alpha = 0.01
-for it in range(250):
+alpha = 0.1
+for it in range(500):
     with tf.GradientTape() as t:
         y_hat = predict(X_train, W, b)
-        current_loss = binary_crossentropy_loss(
+        current_loss = categorial_crossentropy_loss(
             y_train, y_hat)
 
     print(f"it: {it}, loss = {current_loss}")
@@ -74,33 +78,19 @@ print("\nW sau khi huấn luyện: \n", W.numpy())
 print("\nb sau khi huấn luyện: \n", b.numpy())
 
 
-y_hat = predict(X_test, W, b)
+predicted_y = predict(X_test, W, b)
 
-# Phân ngưỡng dự đoán so với 0.5
-processed_y_hat = tf.round(y_hat)
+print("\nKết quả thực tế: \n", y_test.numpy()[:5])
+print("\nKết quả dự đoán: \n", predicted_y.numpy()[:5])
 
-print("\nKết quả thực tế: \n", y_test.numpy())
-print("\nKết quả dự đoán: \n", processed_y_hat.numpy())
-
-# Loại bỏ chiều thừa
-processed_y_hat = tf.reshape(processed_y_hat, [-1])
-y_test = tf.reshape(y_test, [-1])
-
-# Chuyển tensor sang NumPy cho dễ tính toán
-y_test_toNumPy = y_test.numpy()
-processed_y_hat_toNumPy = processed_y_hat.numpy()
-
-print("\nKết quả thực tế: \n", y_test_toNumPy)
-print("\nKết quả dự đoán: \n", processed_y_hat_toNumPy)
+# Chuyển về dạng nhãn gốc
+y_test = tf.argmax(y_test, axis=1)
+processed_y_hat = tf.argmax(predicted_y, axis=1)
 
 # Tính độ chính xác
-test_elements_len = len(y_test_toNumPy)
+accuracy = tf.reduce_mean(tf.cast(tf.equal(y_test, processed_y_hat), tf.float32))
 
-true_test_predictions = 0
-for i in range(len(y_test_toNumPy)):
-    if processed_y_hat_toNumPy[i] == y_test_toNumPy[i]:
-        true_test_predictions += 1
+print("\n Y thực tế:\n", y_test.numpy())
+print("\n Y dự đoán:\n", processed_y_hat.numpy())
 
-accuracy = float(true_test_predictions / test_elements_len)
-
-print(f"\nĐộ chính xác: {accuracy:.2f}")
+print("\nAccuracy: {:.2f}".format(accuracy.numpy()))
